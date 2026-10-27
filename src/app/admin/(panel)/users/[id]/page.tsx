@@ -25,7 +25,8 @@ const TXN_LABEL: Record<string, string> = {
   adjust: "Admin adjustment",
 };
 
-export default async function UserDetail({ params }: { params: { id: string } }) {
+export default async function UserDetail(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const data = await getUser(params.id);
   if (!data) notFound();
   const { user: u, matches, invited, sessions, h2h } = data;

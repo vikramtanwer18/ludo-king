@@ -13,8 +13,8 @@ const STATUSES = [
   { v: "cancelled", l: "Cancelled" },
 ];
 
-export default async function Matches({ searchParams }: { searchParams: Record<string, string | undefined> }) {
-  const sp = searchParams;
+export default async function Matches({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const { rows, total, page, per } = await listMatches({ status: sp.status, game: sp.game, q: sp.q, page: Number(sp.page) || 1 });
   const tabHref = (v: string) => {
     const p = new URLSearchParams(Object.entries({ ...sp, status: v, page: "" }).filter(([, x]) => x) as [string, string][]);

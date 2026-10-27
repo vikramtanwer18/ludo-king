@@ -1,11 +1,15 @@
 import "server-only";
-import fs from "node:fs";
-import path from "node:path";
+import pg from "pg";
+import { pgConfig } from "../../scripts/pg-config.mjs";
 
 /*
- * One tiny query function over either:
- *  - real Postgres (DATABASE_URL=postgres://...)  ← production
- *  - embedded PGlite (no DATABASE_URL)            ← local demo, stored in ./.pglite
+ * PostgreSQL connection pool (AWS RDS in production).
+ *
+ *   DATABASE_URL=postgres://user:password@host:5432/dbname   (required)
+ *   SSL: automatic and certificate-verified for RDS hosts; see scripts/pg-config.mjs.
+ *   PG_POOL_MAX=10                connections per app instance (keep instances × this below RDS max_connections)
+ *
+ * The schema is created by `npm run db:migrate` (db/migrations), which Docker runs before start.
  */
 
 type Row = Record<string, unknown>;
@@ -15,70 +19,49 @@ export interface Db {
   tx: <T>(fn: (q: Q) => Promise<T>) => Promise<T>;
 }
 
-const g = globalThis as unknown as { __db?: Promise<Db> };
+// BIGINT columns hold millisecond times and paise; they fit safely in a JS number.
+pg.types.setTypeParser(20, (v) => Number(v));
 
-async function connect(): Promise<Db> {
-  const url = process.env.DATABASE_URL;
-  let db: Db;
-  let close: () => Promise<unknown> = async () => {};
+const g = globalThis as unknown as { __pool?: pg.Pool; __db?: Db };
 
-  if (url) {
-    const { Pool } = await import("pg");
-    const pool = new Pool({
-      connectionString: url,
-      ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined,
+function pool() {
+  if (!g.__pool) {
+    const { connectionString, ssl } = pgConfig();
+    g.__pool = new pg.Pool({
+      connectionString,
+      ssl,
+      max: Number(process.env.PG_POOL_MAX) || 10,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
+      // Stop runaway queries instead of holding a connection forever.
+      statement_timeout: 15_000,
+      application_name: "goti-rooms",
     });
-    close = () => pool.end();
-    const q: Q = async (sql, params) => (await pool.query(sql, params as unknown[])).rows;
-    db = {
-      q,
-      tx: async (fn) => {
-        const c = await pool.connect();
-        try {
-          await c.query("BEGIN");
-          const out = await fn(async (sql, params) => (await c.query(sql, params as unknown[])).rows);
-          await c.query("COMMIT");
-          return out;
-        } catch (e) {
-          await c.query("ROLLBACK");
-          throw e;
-        } finally {
-          c.release();
-        }
-      },
-    };
-  } else {
-    const { PGlite } = await import("@electric-sql/pglite");
-    const dir = process.env.PGLITE_DIR || path.join(process.cwd(), ".pglite");
-    const pg = new PGlite(dir);
-    close = () => pg.close();
-    const q: Q = async (sql, params) => (await pg.query(sql, params as unknown[])).rows as never;
-    db = {
-      q,
-      tx: (fn) => pg.transaction(async (t) => fn(async (sql, params) => (await t.query(sql, params as unknown[])).rows as never)),
-    };
+    g.__pool.on("error", (e) => console.error("[db] idle client error:", e.message));
   }
-
-  try {
-    const schema = fs.readFileSync(path.join(process.cwd(), "db", "schema.sql"), "utf8");
-    for (const stmt of schema.split(";").map((s) => s.replace(/--.*$/gm, "").trim()).filter(Boolean)) {
-      await db.q(stmt);
-    }
-    const { seedIfEmpty } = await import("./seed");
-    await seedIfEmpty(db);
-  } catch (e) {
-    await close().catch(() => {});
-    if (url) console.error(`[db] Can't connect to DATABASE_URL (${(e as Error).message}). Check the username/password in .env, or remove DATABASE_URL to use the built-in database.`);
-    throw e;
-  }
-  return db;
+  return g.__pool;
 }
 
-export function getDb() {
-  // If connecting fails (wrong password, server down), forget it so the next request tries again.
-  g.__db ??= connect().catch((e) => {
-    g.__db = undefined;
-    throw e;
-  });
+export async function getDb(): Promise<Db> {
+  if (g.__db) return g.__db;
+  const p = pool();
+  const q: Q = async (sql, params) => (await p.query(sql, params as unknown[])).rows;
+  g.__db = {
+    q,
+    tx: async (fn) => {
+      const c = await p.connect();
+      try {
+        await c.query("BEGIN");
+        const out = await fn(async (sql, params) => (await c.query(sql, params as unknown[])).rows);
+        await c.query("COMMIT");
+        return out;
+      } catch (e) {
+        await c.query("ROLLBACK").catch(() => {});
+        throw e;
+      } finally {
+        c.release();
+      }
+    },
+  };
   return g.__db;
 }

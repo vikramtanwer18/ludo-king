@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Check, Copy, Send, Share2 } from "lucide-react";
 import { useMe, useStore } from "@/lib/store";
 import { APP } from "@/lib/config";
@@ -11,9 +11,9 @@ export default function Invite() {
   const me = useMe()!;
   const users = useStore((s) => s.users);
   const friends = users.filter((u) => u.invitedBy === me.id);
-  const [origin, setOrigin] = useState("");
+  // Player pages only render in the browser (AppShell waits for the session), so window is available.
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
   const [copied, setCopied] = useState(false);
-  useEffect(() => setOrigin(window.location.origin), []);
 
   const link = `${origin}/login?invite=${me.inviteCode}`;
   const msg = `Let's play Ludo on ${APP.name}. Join with my code ${me.inviteCode}: ${link}`;

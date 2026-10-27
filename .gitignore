@@ -21,8 +21,13 @@ __pycache__/
 # production
 /build
 
-# local database (embedded PGlite) - contains player data
+# old embedded database from earlier versions (no longer used; safe to delete)
 /.pglite/
+# test output
+e2e-report.json
+/shots/
+*.sql.gz
+backup*.sql
 
 # env files: secrets (API keys, passwords). Only the example is committed.
 .env

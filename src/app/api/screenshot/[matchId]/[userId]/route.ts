@@ -8,9 +8,10 @@ export const dynamic = "force-dynamic";
  * Serves a posted screenshot as a real image (browsers won't open data: URLs in a new tab).
  * Allowed for the two players in the match and for signed-in admins.
  */
-export async function GET(_: Request, { params }: { params: { matchId: string; userId: string } }) {
+export async function GET(_: Request, ctx: { params: Promise<{ matchId: string; userId: string }> }) {
+  const params = await ctx.params;
   const db = await getDb();
-  const jar = cookies();
+  const jar = await cookies();
   const me = await userFromToken(jar.get(SESSION_COOKIE)?.value);
   const adminToken = jar.get(ADMIN_COOKIE)?.value;
   const [admin] = adminToken

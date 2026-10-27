@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import type { ReactNode } from "react";
 import type { FormState } from "@/app/admin/actions";
 
@@ -37,7 +38,7 @@ export default function ActionForm({
   confirm?: string;
   className?: string;
 }) {
-  const [state, formAction] = useFormState(action, undefined);
+  const [state, formAction] = useActionState(action, undefined);
   return (
     <form action={formAction} className={className ?? "space-y-3"}>
       {children}

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { SESSION_COOKIE, userFromToken } from "@/server/auth";
 import { Fail } from "@/server/errors";
+import { LIMITS, rateLimit, tooMany } from "@/server/ratelimit";
 import {
   cancelWithdrawal,
   checkDeposit,
@@ -18,7 +19,7 @@ const unauthorized = () => NextResponse.json({ ok: false, error: "Log in to cont
 
 /** Balance, KYC and full history for the wallet page. */
 export async function GET() {
-  const me = await userFromToken(cookies().get(SESSION_COOKIE)?.value);
+  const me = await userFromToken((await cookies()).get(SESSION_COOKIE)?.value);
   if (!me) return unauthorized();
   return NextResponse.json({ ok: true, ...(await walletFor(me)) });
 }
@@ -32,8 +33,10 @@ type Body =
   | { type: "saveKyc"; [k: string]: unknown };
 
 export async function POST(req: Request) {
-  const me = await userFromToken(cookies().get(SESSION_COOKIE)?.value);
+  const me = await userFromToken((await cookies()).get(SESSION_COOKIE)?.value);
   if (!me) return unauthorized();
+  const rl = await rateLimit(`wallet:${me}`, ...LIMITS.walletPerUser);
+  if (!rl.ok) return NextResponse.json({ ok: false, error: tooMany(rl.retryIn) }, { status: 429 });
   let b: Body;
   try {
     b = await req.json();

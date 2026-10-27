@@ -1,6 +1,7 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { LIMITS, clientIp, rateLimit, tooMany } from "@/server/ratelimit";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/server/db";
@@ -38,9 +39,11 @@ const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 /* ---------- session ---------- */
 export async function loginAction(_: FormState, f: FormData): Promise<FormState> {
+  const rl = await rateLimit(`admin-login:${clientIp(await headers())}`, ...LIMITS.adminLoginPerIp);
+  if (!rl.ok) return { error: tooMany(rl.retryIn) };
   try {
     const { token, maxAge } = await adminLogin(str(f, "email"), String(f.get("password") ?? ""));
-    cookies().set(ADMIN_COOKIE, token, {
+    (await cookies()).set(ADMIN_COOKIE, token, {
       httpOnly: true,
       sameSite: "strict",
       secure: process.env.NODE_ENV === "production" && process.env.INSECURE_COOKIES !== "true",

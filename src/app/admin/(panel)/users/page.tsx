@@ -11,8 +11,8 @@ const SORTS: { v: UserSort; l: string }[] = [
   { v: "seen", l: "Recently active" },
 ];
 
-export default async function Users({ searchParams }: { searchParams: Record<string, string | undefined> }) {
-  const sp = searchParams;
+export default async function Users({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const sort = (SORTS.find((s) => s.v === sp.sort)?.v ?? "joined") as UserSort;
   const { rows, total, page, per } = await listUsers({ q: sp.q, status: sp.status, sort, page: Number(sp.page) || 1 });
 

@@ -1,0 +1,25 @@
+# Keep the build context small and secrets out of the image.
+node_modules
+.next
+.pglite
+.git
+.gitignore
+.vscode
+.idea
+
+# secrets: passed at runtime with env_file / -e, never baked into the image
+.env
+.env.*
+!.env.example
+
+# tests, docs and local tooling
+tests
+docs
+coverage
+*.log
+__pycache__
+Dockerfile
+docker-compose*.yml
+.dockerignore
+README.md
+*.tsbuildinfo

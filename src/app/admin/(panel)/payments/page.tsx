@@ -14,8 +14,8 @@ const STATUSES = [
   { v: "events", l: "Webhook log" },
 ];
 
-export default async function Payments({ searchParams }: { searchParams: Record<string, string | undefined> }) {
-  const sp = searchParams;
+export default async function Payments({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const view = sp.status ?? "";
   const stats = await depositStats();
   const mode = paymentsMode();

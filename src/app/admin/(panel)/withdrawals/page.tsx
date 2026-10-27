@@ -15,8 +15,8 @@ const STATUSES = [
   { v: "all", l: "All" },
 ];
 
-export default async function Withdrawals({ searchParams }: { searchParams: Record<string, string | undefined> }) {
-  const sp = searchParams;
+export default async function Withdrawals({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const view = sp.status ?? "";
   const stats = await withdrawalStats();
   // "To do" = pending + approved.

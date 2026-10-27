@@ -1,36 +1,40 @@
 {
   "name": "ludo-rooms",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node --env-file-if-exists=.env scripts/migrate.mjs && next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "postbuild": "node scripts/postbuild.mjs",
+    "start": "node --env-file-if-exists=.env scripts/migrate.mjs && node --env-file-if-exists=.env .next/standalone/server.js",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
+    "db:seed": "node --env-file-if-exists=.env scripts/seed-demo.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test:api": "node --test tests/api.test.mjs",
-    "test:e2e": "python3 tests/e2e.py"
+    "test:e2e": "python tests/e2e.py"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.5.11",
     "lucide-react": "^1.61.0",
-    "next": "14.2.35",
+    "next": "^16.4.3",
     "pg": "^8.23.1",
-    "react": "^18",
-    "react-dom": "^18",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "server-only": "^0.0.1",
     "zustand": "^5.0.16"
   },
   "devDependencies": {
-    "@types/node": "^20",
+    "@types/node": "^22.20.5",
     "@types/pg": "^8.23.1",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.35",
-    "mailparser": "^3.12.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.3",
     "postcss": "^8",
-    "smtp-server": "^3.21.1",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=22.9"
   }
 }

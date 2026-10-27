@@ -17,7 +17,8 @@ function Money({ label, v }: { label: string; v: string }) {
   );
 }
 
-export default async function MatchDetail({ params }: { params: { id: string } }) {
+export default async function MatchDetail(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const data = await getMatch(params.id);
   if (!data) notFound();
   const { match: m, users, history } = data;

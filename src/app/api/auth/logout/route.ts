@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   try {
     everywhere = !!(await req.json()).everywhere;
   } catch {}
-  await logoutSession(cookies().get(SESSION_COOKIE)?.value, everywhere);
+  await logoutSession((await cookies()).get(SESSION_COOKIE)?.value, everywhere);
   const res = NextResponse.json({ ok: true });
   res.cookies.delete(SESSION_COOKIE);
   return res;

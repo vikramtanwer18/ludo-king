@@ -1,0 +1,49 @@
+# Goti Rooms.
+#
+# Production (database = AWS RDS, set DATABASE_URL in .env):
+#   docker compose up -d --build      app on http://localhost:3000
+#   docker compose logs -f app
+#   docker compose down
+#
+# Local development only — a PostgreSQL container on localhost:5433:
+#   docker compose --profile local-db up -d db
+#   (then DATABASE_URL=postgres://goti:<POSTGRES_PASSWORD>@localhost:5433/goti_rooms and `npm run dev`)
+
+services:
+  app:
+    build: .
+    image: goti-rooms:latest
+    restart: unless-stopped
+    init: true
+    # All settings, including DATABASE_URL (RDS), come from .env.
+    env_file: .env
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  db:
+    profiles: ["local-db"]
+    # Keep the major version: a new major can't open the old data folder (upgrade = dump + restore).
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: goti_rooms
+      POSTGRES_USER: goti
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goti -d goti_rooms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Reachable only from this computer.
+    ports:
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
+
+volumes:
+  pgdata:

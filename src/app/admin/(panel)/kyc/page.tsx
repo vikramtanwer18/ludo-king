@@ -11,8 +11,8 @@ const STATUSES = [
   { v: "all", l: "All" },
 ];
 
-export default async function KycPage({ searchParams }: { searchParams: Record<string, string | undefined> }) {
-  const sp = searchParams;
+export default async function KycPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const view = sp.status ?? "";
   const { rows, total, page, per } = await listKyc({
     status: view === "" ? "pending" : view === "all" ? undefined : view,

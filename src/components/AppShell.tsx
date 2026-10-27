@@ -52,7 +52,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const logout = useStore((s) => s.logout);
   const me = useMe();
   const unread = useStore((s) => s.notices.filter((n) => n.userId === s.meId && !n.read).length);
-  const [drawer, setDrawer] = useState(false);
+  // The drawer remembers the page it was opened on, so it closes by itself after navigating.
+  const [drawerAt, setDrawerAt] = useState<string | null>(null);
+  const drawer = drawerAt === path;
+  const setDrawer = (open: boolean) => setDrawerAt(open ? path : null);
   const settings = useStore((s) => s.settings);
   const balance = useStore((s) => s.wallet?.balance ?? 0);
 
@@ -70,7 +73,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
     };
   }, [refresh, isAdminArea]);
 
-  useEffect(() => setDrawer(false), [path]);
 
   const isPublic = PUBLIC.some((p) => path.startsWith(p));
   useEffect(() => {

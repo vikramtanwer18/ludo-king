@@ -1,6 +1,7 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { loginAction } from "../actions";
 import { LogoMark } from "@/components/ui";
 import { APP } from "@/lib/config";
@@ -11,7 +12,7 @@ function Submit() {
 }
 
 export default function AdminLogin() {
-  const [state, action] = useFormState(loginAction, undefined);
+  const [state, action] = useActionState(loginAction, undefined);
   return (
     <div className="min-h-screen grid place-items-center bg-ink px-4">
       <div className="w-full max-w-sm">

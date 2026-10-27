@@ -8,7 +8,8 @@ const RANGES = [
   { v: "all", l: "All time" },
 ];
 
-export default async function Winners({ searchParams }: { searchParams: { range?: string; by?: string } }) {
+export default async function Winners(props: { searchParams: Promise<{ range?: string; by?: string }> }) {
+  const searchParams = await props.searchParams;
   const range = RANGES.find((r) => r.v === searchParams.range)?.v ?? "7";
   const by = searchParams.by === "losses" ? "losses" : searchParams.by === "rate" ? "rate" : "wins";
   let rows = await leaderboard(range === "all" ? null : Number(range));

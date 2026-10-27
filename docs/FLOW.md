@@ -4,7 +4,7 @@ Player app at `/`, admin panel at `/admin`, both in the same Next.js project.
 
 An app where friends find each other for a Ludo match, share a Ludo King room code, and record who won. Each room has an **entry amount** paid from the player's **wallet**; the winner gets the pot minus a platform commission. Players add cash with a **Razorpay UPI QR** and withdraw after **KYC**, with every withdrawal reviewed by an admin (see section 16).
 
-- **Stack:** Next.js 14 (App Router) + Tailwind, PostgreSQL, Next.js API routes.
+- **Stack:** Next.js 16 (App Router) + React 19 + Tailwind, PostgreSQL, Resend, Razorpay, Docker.
 - **Where the rules live:** `src/server/logic.ts` (server). The browser only shows state and sends actions.
 - **Brand placeholders:** `src/lib/config.ts` (`APP.name`, support links, game list, timers).
 
@@ -30,7 +30,7 @@ An app where friends find each other for a Ludo match, share a Ludo King room co
 **Step 1 — email address**
 - Any valid email (trimmed and lower-cased, so `Aarav@Gmail.com` and `aarav@gmail.com` are the same account). Optional `ALLOWED_EMAIL_DOMAINS=gmail.com` accepts only Gmail.
 - **Send code** → `POST /api/auth/otp` → a 6-digit code is emailed (subject "123456 is your Goti Rooms login code", plain-text and HTML body).
-- If the email can't be sent (wrong SMTP password, server down), the player sees "We couldn't send the email…", nothing is stored, and they can retry straight away.
+- If the email can't be sent (Resend error, domain not verified), the player sees "We couldn't send the email…", nothing is stored, and they can retry straight away.
 - Blocked if the account is suspended (shows the reason), if the last code was sent under 30 seconds ago, or after 5 codes in an hour.
 
 **Step 2 — code (and name for new players)**
@@ -40,7 +40,7 @@ An app where friends find each other for a Ludo match, share a Ludo King room co
 - A code works once. It's consumed inside the same transaction that creates the session.
 - The screen shows which address the code went to, with "Check your inbox and spam folder" and a **Change** link.
 - If the email is new, the same screen asks for **name** (2–40 letters) and an optional **invite code**. An invite code that doesn't exist is rejected.
-- Demo mode (no `SMTP_HOST` set): no email is sent; the code is shown on screen in a yellow box and printed in the server log. With SMTP set (Gmail settings in the README), the code is only in the email.
+- Development without `RESEND_API_KEY`: no email is sent; the code is shown on screen in a yellow box and printed in the server log. Production requires Resend and never shows the code.
 - Accounts created earlier with a mobile number: demo players got `firstname@example.com`; other mobile-only accounts keep their matches but can't log in until an email is added.
 
 **After login**
@@ -248,21 +248,25 @@ Separate login with email and password. Only people in the `admins` table can si
 
 **My account — `/admin/account`**: change password (8+ characters with letters and numbers; signs out other admin sessions); list of admins with last sign-in.
 
-## 13. Data model (PostgreSQL) — `db/schema.sql`
+## 13. Data model (PostgreSQL) — `db/migrations`
 
 | Table | Key columns |
 |---|---|
-| `users` | id, name, phone (unique), tone, invite_code (unique), invited_by, created_at |
+| `users` | id, name, email (unique, lower-case), tone, invite_code (unique), invited_by, status (active/suspended), suspended_reason, last_seen_at, **balance** (paise, never negative), created_at |
 | `sessions` | token, user_id, expires_at |
-| `matches` | id, game, note, created_by, joined_by, status, room_code, room_code_deadline, started_at, first_result_at, results (jsonb per player: outcome, reason, screenshot, at), winner_id, ended_reason, created_at, updated_at |
-| `notices` | id, user_id, text, href, at, read |
-| `users` (v2/v3 columns) | status (active/suspended), suspended_reason, last_seen_at, **email** (unique, lower-case; `phone` is now optional and unused) |
 | `email_otps` | email, code_hash, expires_at, attempts, sent_at, sends_hour, hour_start |
-| `admins` | id, email, name, password_hash, last_login_at |
-| `admin_sessions` | token, admin_id, expires_at |
-| `admin_login_attempts` | email, fails, locked_until |
-| `settings` | key (announcement / games / maintenance), value jsonb |
+| `matches` | id, game, created_by, joined_by, status, room_code, room_code_deadline, started_at, first_result_at, results (jsonb per player: outcome, reason, screenshot, at), winner_id, ended_reason, **amount, fee_pct, prize, fee**, created_at, updated_at |
+| `notices` | id, user_id, text, href, at, read |
+| `wallet_txns` | user_id, kind (deposit/stake/refund/win/withdraw/withdraw_refund/adjust), amount (signed), balance_after, ref, note, admin_id, at |
+| `deposits` | user_id, amount, paid_amount, status, qr_id, qr_image, close_by, payment_id (unique), method, payer, failure_reason |
+| `withdrawals` | user_id, amount, method (bank/upi), destination (jsonb), status, admin_note, utr, reviewed_by |
+| `kyc` | user_id, full_name, pan, bank_holder, bank_account, bank_ifsc, upi_id, status, reject_reason, reviewed_by |
+| `payment_events` | id (Razorpay event id), event, deposit_id, payment_id, result, payload |
+| `admins` / `admin_sessions` / `admin_login_attempts` | admin accounts, sessions, lockouts |
+| `settings` | key (announcement / games / maintenance / wallet), value jsonb |
 | `audit_log` | admin_id, action, target, detail, at |
+| `rate_limits` | key, window_start, hits |
+| `schema_migrations` | which migration files have run |
 
 All state changes run inside a transaction with the match row locked (`SELECT … FOR UPDATE`), so two players acting at once can't both win the same seat.
 
@@ -327,10 +331,8 @@ Commission % is set in Admin → Settings and fixed on each room when it's creat
 - **Dashboard** — cash added, withdrawals to pay, total in player wallets (and held in rooms), commission earned; banners for pending withdrawals and KYC.
 - Every review, adjustment and setting change is in the activity log.
 
-## 15. Not in the demo (production to-dos)
+## 15. Possible next steps
 
-- Set the SMTP settings (README) so codes are emailed; for more than ~500 sign-ins a day use a mail service rather than a personal Gmail.
-- IP-based rate limiting in front of `/api/auth/otp` (per-email limits are already in place).
 - Admin roles (e.g. read-only support vs full admin) and an "add admin" screen.
 - Screenshot storage in object storage (S3/R2) instead of the database.
 - Web push or WebSockets instead of 3-second polling.

@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { statsFor, useMe, useStore } from "@/lib/store";
-import { Avatar, Empty, PageTitle } from "@/components/ui";
+import { Avatar, Empty, PageTitle, useNow } from "@/components/ui";
 
 export default function Leaderboard() {
   const me = useMe()!;
   const users = useStore((s) => s.users);
   const matches = useStore((s) => s.matches);
   const [range, setRange] = useState<"week" | "all">("week");
-  const since = range === "week" ? Date.now() - 7 * 86400000 : 0;
+  const now = useNow(60_000);
+  const since = range === "week" ? now - 7 * 86400000 : 0;
   const pool = matches.filter((m) => m.updatedAt >= since);
 
   const rows = users

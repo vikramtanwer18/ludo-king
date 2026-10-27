@@ -10,7 +10,6 @@ export interface User {
   inviteCode: string;
   invitedBy?: string; // user id
   createdAt: number;
-  isSeed?: boolean;
 }
 
 export type MatchStatus =

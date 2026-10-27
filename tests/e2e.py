@@ -4,10 +4,9 @@ Browser end-to-end checks for Goti Rooms (player app + admin panel).
     pip install playwright pillow && python -m playwright install chromium
     BASE_URL=http://localhost:3000 ADMIN_EMAIL=... ADMIN_PASSWORD=... python tests/e2e.py
 
-Needs a running server with the demo seed (fresh database recommended).
+Needs a development server without Resend/Razorpay keys (codes on screen, demo payments),
+with demo data: `npm run db:seed` on a fresh database.
 Optional: AXE_PATH=path/to/axe.min.js for an accessibility scan, SHOTS_DIR to save screenshots.
-Login codes: read from the on-screen demo box, or, when the server sends real email,
-from MAIL_INBOX (JSON file of captured messages, see docs/TESTING.md).
 """
 import asyncio, io, json, os, re, time, traceback
 from playwright.async_api import async_playwright, Page
@@ -17,7 +16,6 @@ ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@example.com")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "change-me-123")
 AXE = os.environ.get("AXE_PATH")
 SHOTS = os.environ.get("SHOTS_DIR")
-INBOX = os.environ.get("MAIL_INBOX")
 # 400s are the API's expected answers to invalid input (tested on purpose); 500s are not ignored.
 IGNORE_CONSOLE = re.compile(r"fonts\.g|ERR_TUNNEL|Failed to fetch RSC payload|ERR_CONNECTION|net::ERR_ABORTED|status of 400")
 
@@ -92,17 +90,8 @@ def new_email():
 
 
 async def code_for(page: Page, email: str) -> str:
-    """Wait for the code screen, then take the code from the demo box or from the emailed message."""
+    """Wait for the code screen, then take the code from the development box."""
     await page.locator("text=We emailed a 6-digit code to").wait_for(timeout=10000)
-    if INBOX:
-        assert await page.locator("text=Your code is").count() == 0, "code must not be on screen when email is real"
-        for _ in range(20):
-            with open(INBOX) as f:
-                mails = [m for m in json.load(f) if email.lower() in m["envelopeTo"]]
-            if mails:
-                return re.search(r"\b\d{6}\b", mails[-1]["subject"]).group(0)
-            await page.wait_for_timeout(250)
-        raise AssertionError(f"no email arrived for {email}")
     box = page.locator("text=Your code is")
     await box.wait_for(timeout=10000)
     return re.search(r"\d{6}", await box.inner_text()).group(0)
@@ -119,6 +108,18 @@ async def player_login(page: Page, name: str, email: str | None = None):
     await page.click("form button.btn-primary")
     await page.wait_for_url(f"{BASE}/", timeout=10000)
     return email
+
+
+async def top_up(page: Page, rupees=500):
+    """Adds cash through the development "Simulate payment" flow."""
+    ok = await page.evaluate("""async (amount) => {
+        const post = (b) => fetch('/api/wallet', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b)}).then(r => r.json());
+        const d = await post({type: 'deposit', amount});
+        if (!d.ok) return d.error;
+        const s = await post({type: 'simulateDeposit', id: d.deposit.id});
+        return s.ok ? true : s.error;
+    }""", rupees)
+    assert ok is True, f"top-up failed: {ok}"
 
 
 async def admin_login(page: Page, password=ADMIN_PASSWORD):
@@ -190,7 +191,9 @@ async def main():
         async def signups():
             state["host_email"] = await player_login(host, "Asha")
             state["guest_email"] = await player_login(guest, "Vikram")
-            await host.locator("text=Who are you playing today?").wait_for()
+            await host.get_by_role("heading", name="Who are you playing today?").wait_for()
+            await top_up(host)
+            await top_up(guest)
         await check("Two new players sign up through the UI", signups())
 
         async def every_player_page():
@@ -221,12 +224,15 @@ async def main():
 
         async def match_flow():
             await host.goto(f"{BASE}/play/ludo-classic")
-            await host.fill("input[aria-label='Room note']", "E2E evening game")
+            await host.fill("#amount", "75")
+            await host.locator("text=Use a multiple of ₹50").wait_for()
+            await host.fill("#amount", "150")
+            await host.locator("text=Winner gets").wait_for()
             await host.click("button:has-text('Create room')")
             await host.locator("text=Room created").wait_for()
             await guest.goto(f"{BASE}/play/ludo-classic")
-            card = guest.locator("div.card", has_text="E2E evening game")
-            await card.locator("button:has-text('Ask to join')").click()
+            card = guest.locator("div.card", has_text="Asha").filter(has_text="₹150")
+            await card.locator("button:has-text('Join')").click()
             await guest.wait_for_url(re.compile(r"/match/"))
             state["match"] = guest.url.rsplit("/", 1)[-1]
             await guest.locator("text=Waiting for the host").wait_for()
@@ -256,6 +262,7 @@ async def main():
             await host.click("button:has-text('Post result')")
             await host.locator("text=Vikram won").wait_for(timeout=8000)
             await guest.locator("text=You won").wait_for(timeout=8000)
+            await guest.locator("text=added to your wallet").first.wait_for(timeout=8000)
             await shot(guest, "p-guest-won")
             href = await host.locator("a:has(img[alt*=\"screenshot\"])").first.get_attribute("href")
             r = await host.request.get(BASE + href)
@@ -429,6 +436,7 @@ async def main():
             try:
                 await host.goto(f"{BASE}/play/ludo-classic")
                 await host.locator("[role=status]", has_text="E2E maintenance, back soon").wait_for(timeout=8000)
+                await host.fill("#amount", "50")
                 await host.click("button:has-text('Create room')")
                 await host.locator("text=E2E maintenance, back soon").nth(1).wait_for()
             finally:

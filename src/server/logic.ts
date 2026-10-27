@@ -349,6 +349,12 @@ async function resolve(q: Q, m: Match, poster: string, other: string) {
 export async function sweep() {
   const db = await getDb();
   const now = Date.now();
+  // Housekeeping now and then: expired sessions and old login codes.
+  if (Math.random() < 0.005) {
+    db.q("DELETE FROM sessions WHERE expires_at < $1", [now]).catch(() => {});
+    db.q("DELETE FROM admin_sessions WHERE expires_at < $1", [now]).catch(() => {});
+    db.q("DELETE FROM email_otps WHERE expires_at < $1 AND hour_start < $2", [now, now - 3_600_000]).catch(() => {});
+  }
   const due = (await db.q<MatchRow>(
     `SELECT * FROM matches WHERE status='running' AND (
        (room_code IS NULL AND room_code_deadline < $1) OR (first_result_at < $2))`,

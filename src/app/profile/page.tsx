@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Bell, ChevronRight, LogOut, Pencil } from "lucide-react";
 import { statsFor, useMe, useStore } from "@/lib/store";
 import type { Tone } from "@/lib/types";
@@ -25,11 +25,9 @@ export default function Profile() {
   const st = statsFor(matches, me.id);
   const [editName, setEditName] = useState(false);
   const [name, setName] = useState(me.name);
-  const [perm, setPerm] = useState<NotificationPermission | "unsupported">("default");
-
-  useEffect(() => {
-    setPerm(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
-  }, []);
+  const [perm, setPerm] = useState<NotificationPermission | "unsupported">(() =>
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission
+  );
 
   const filled = [me.name, me.email, me.tone].filter(Boolean).length + (st.played > 0 ? 1 : 0);
   const completion = Math.round((filled / 4) * 100);

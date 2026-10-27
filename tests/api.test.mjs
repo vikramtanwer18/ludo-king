@@ -1,32 +1,19 @@
 // API tests for Goti Rooms.
 //
-//   BASE_URL=http://localhost:3000 DATABASE_URL=postgres://... node --test tests/
+//   docker compose --profile local-db up -d db          (never run tests against production RDS)
+//   RESEND_API_KEY= RAZORPAY_KEY_ID= RAZORPAY_KEY_SECRET= npm run dev     # development server
+//   BASE_URL=http://localhost:3000 DATABASE_URL=postgres://... npm run test:api
 //
-// Needs a running server. With DATABASE_URL (same database the server uses), the suite
-// also checks timers, settings, rate limits and suspension by editing rows directly.
-// Without it, those tests are skipped.
-//
-// Login codes: in demo mode (no SMTP_HOST on the server) the code comes back in the response.
-// When the server really sends email, point MAIL_INBOX at a JSON file of captured messages
-// (see docs/TESTING.md) and the tests read each code from the email itself.
+// Needs a development server WITHOUT Resend and Razorpay keys: login codes come back in the
+// response and payments use the demo "Simulate payment" flow. With DATABASE_URL (the same
+// database) the suite also checks timers, settings and suspension by editing rows directly.
+// Set WEBHOOK_SECRET to the server's RAZORPAY_WEBHOOK_SECRET to test the webhook too.
 
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 
 const BASE = process.env.BASE_URL || "http://localhost:3000";
 const DB_URL = process.env.DATABASE_URL;
-const INBOX = process.env.MAIL_INBOX;
-
-function codeFromInbox(email) {
-  assert.ok(INBOX, "server sent a real email; set MAIL_INBOX to read the code");
-  const to = String(email).trim().toLowerCase();
-  const mails = JSON.parse(fs.readFileSync(INBOX, "utf8")).filter((m) => m.envelopeTo.includes(to));
-  assert.ok(mails.length, `no email arrived for ${to}`);
-  const code = mails.at(-1).subject.match(/\b\d{6}\b/);
-  assert.ok(code, "subject carries the code");
-  return code[0];
-}
 
 let db = null;
 before(async () => {
@@ -72,7 +59,7 @@ function client() {
     call,
     otp: async (email) => {
       const r = await call("/api/auth/otp", { email });
-      if (r.ok) r.code = r.devCode ?? codeFromInbox(email);
+      if (r.ok) r.code = r.devCode;
       return r;
     },
     verify: (b) => call("/api/auth/login", b),
@@ -142,7 +129,6 @@ describe("player auth", () => {
     ok(o);
     assert.equal(o.isNew, true);
     assert.match(o.code, /^\d{6}$/);
-    if (INBOX) assert.equal(o.devCode, undefined, "with real email the code is never in the response");
     no(await c.verify({ email, otp: o.code }), /name/);
     no(await c.verify({ email, otp: o.code, name: "x".repeat(41) }), /40/);
     no(await c.verify({ email, otp: o.code, name: "Neel", invite: "ZZZZZZ" }), /invite code doesn't exist/);

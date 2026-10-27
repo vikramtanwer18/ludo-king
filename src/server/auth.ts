@@ -236,7 +236,7 @@ export interface AdminUser {
 }
 
 export async function currentAdmin(): Promise<AdminUser | null> {
-  const token = cookies().get(ADMIN_COOKIE)?.value;
+  const token = (await cookies()).get(ADMIN_COOKIE)?.value;
   if (!token) return null;
   const db = await getDb();
   const [a] = await db.q<AdminUser>(
@@ -255,12 +255,12 @@ export async function requireAdmin(): Promise<AdminUser> {
 }
 
 export async function adminLogout() {
-  const token = cookies().get(ADMIN_COOKIE)?.value;
+  const token = (await cookies()).get(ADMIN_COOKIE)?.value;
   if (token) {
     const db = await getDb();
     await db.q("DELETE FROM admin_sessions WHERE token=$1", [token]);
   }
-  cookies().delete(ADMIN_COOKIE);
+  (await cookies()).delete(ADMIN_COOKIE);
 }
 
 export async function changeAdminPassword(adminId: string, current: string, next: string) {
@@ -270,7 +270,7 @@ export async function changeAdminPassword(adminId: string, current: string, next
   if (next.length < 8 || !/[A-Za-z]/.test(next) || !/\d/.test(next))
     fail("New password needs 8+ characters with letters and numbers.");
   await db.q("UPDATE admins SET password_hash=$2 WHERE id=$1", [adminId, hashPassword(next)]);
-  const token = cookies().get(ADMIN_COOKIE)?.value;
+  const token = (await cookies()).get(ADMIN_COOKIE)?.value;
   await db.q("DELETE FROM admin_sessions WHERE admin_id=$1 AND token<>$2", [adminId, token ?? ""]);
   await audit(adminId, "admin.password_changed", adminId);
 }

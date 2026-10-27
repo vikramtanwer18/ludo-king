@@ -19,13 +19,15 @@ function Toggle({ name, label, defaultChecked, hint }: { name: string; label: st
   );
 }
 
+const weekAgo = () => Date.now() - 7 * 86400000;
+
 export default async function SettingsPage() {
   await requireAdmin();
   const db = await getDb();
   const s = await getSettings(db.q);
   const [{ total, active7 }] = await db.q<{ total: number; active7: number }>(
     "SELECT COUNT(*) FILTER (WHERE status='active')::int total, COUNT(*) FILTER (WHERE status='active' AND last_seen_at >= $1)::int active7 FROM users",
-    [Date.now() - 7 * 86400000]
+    [weekAgo()]
   );
 
   return (

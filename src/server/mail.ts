@@ -8,12 +8,13 @@ import { APP } from "@/lib/config";
  *   RESEND_API_KEY=re_xxxxxxxx
  *   EMAIL_FROM=Goti Rooms <noreply@yourdomain.com>   (domain must be verified in Resend)
  *
- * Without RESEND_API_KEY the app runs in demo mode: no email is sent, and the code is shown
- * on the login screen and printed in the server log.
+ * Required in production. In local development without RESEND_API_KEY no email is sent and the
+ * code is shown on the login screen and printed in the server log.
  */
 
 export const EMAIL_CONFIGURED = !!process.env.RESEND_API_KEY;
-export const DEMO_CODE_ON_SCREEN = !EMAIL_CONFIGURED;
+/** Local development only: show the code on screen when Resend isn't set up. Never in production. */
+export const DEMO_CODE_ON_SCREEN = !EMAIL_CONFIGURED && process.env.NODE_ENV !== "production";
 
 const from = () => process.env.EMAIL_FROM || `${APP.name} <onboarding@resend.dev>`;
 
@@ -43,7 +44,8 @@ export async function sendLoginCode(to: string, code: string, minutes: number) {
   ].join("\n");
 
   if (!EMAIL_CONFIGURED) {
-    console.log(`[mail:demo] to ${to}: ${subject}`);
+    if (!DEMO_CODE_ON_SCREEN) throw new Error("RESEND_API_KEY is not set.");
+    console.log(`[mail:dev] to ${to}: ${subject}`);
     return;
   }
 

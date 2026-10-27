@@ -19,6 +19,17 @@ type WalletData = {
   payments: boolean;
 };
 
+async function fetchWallet(): Promise<WalletData | null> {
+  try {
+    const r = await fetch("/api/wallet", { cache: "no-store" });
+    const j = await r.json();
+    return j.ok ? (j as WalletData) : null;
+  } catch {
+    toast.error("Can't reach the server. Check your connection and try again.");
+    return null;
+  }
+}
+
 const when = (t: number) =>
   new Date(t).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
@@ -30,24 +41,21 @@ export default function WalletPage() {
   const [active, setActive] = useState<Deposit | null>(null);
   const refreshState = useStore((s) => s.refresh);
 
-  const load = useCallback(async () => {
-    try {
-      const r = await fetch("/api/wallet", { cache: "no-store" });
-      const j = await r.json();
-      if (j.ok) {
-        setW(j);
-        useStore.setState({ wallet: { balance: j.balance, kyc: j.kyc?.status ?? null } });
-        const open = (j.deposits as Deposit[]).find((d) => d.status === "pending" && (d.closeBy ?? 0) > Date.now() && (d.qrImage || d.demo));
-        setActive((a) => a ?? open ?? null);
-      }
-    } catch {
-      toast.error("Can't reach the server. Check your connection and try again.");
-    }
+  const apply = useCallback((j: WalletData) => {
+    setW(j);
+    useStore.setState({ wallet: { balance: j.balance, kyc: j.kyc?.status ?? null } });
+    const open = j.deposits.find((d) => d.status === "pending" && (d.closeBy ?? 0) > Date.now() && (d.qrImage || d.demo));
+    setActive((a) => a ?? open ?? null);
   }, []);
+  const load = useCallback(() => fetchWallet().then((j) => j && apply(j)), [apply]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    let alive = true;
+    fetchWallet().then((j) => alive && j && apply(j));
+    return () => {
+      alive = false;
+    };
+  }, [apply]);
 
   if (!w) return <div className="card p-8 text-center text-muted">Loading wallet…</div>;
 
@@ -119,7 +127,8 @@ export default function WalletPage() {
           load();
         }}
       />
-      <WithdrawSheet open={wdOpen} onClose={() => setWdOpen(false)} w={w} kycOk={kycOk} onDone={(next) => { setW(next); setWdOpen(false); refreshState(); }} />
+      {/* key: fresh form (amount, default method) every time the sheet opens */}
+      <WithdrawSheet key={wdOpen ? "open" : "closed"} open={wdOpen} onClose={() => setWdOpen(false)} w={w} kycOk={kycOk} onDone={(next) => { setW(next); setWdOpen(false); refreshState(); }} />
     </div>
   );
 }
@@ -283,7 +292,6 @@ function QrPanel({ deposit, onDone, onClose }: { deposit: Deposit; onDone: (d: D
         <span className={`font-display font-bold text-xl tabular-nums ${left < 60000 ? "text-red" : ""}`} aria-label="Time left">{mmss(left)}</span>
       </div>
       {d.qrImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img src={d.qrImage} alt={`UPI QR code for ${inr(d.amount)}`} className="mx-auto mt-4 w-full max-w-[280px] rounded-xl border border-line bg-white" />
       ) : (
         <div className="mx-auto mt-4 w-full max-w-[280px] aspect-square rounded-xl border-2 border-dashed border-line grid place-items-center text-muted p-6">
@@ -316,10 +324,6 @@ function WithdrawSheet({ open, onClose, w, kycOk, onDone }: { open: boolean; onC
   const inProgress = w.withdrawals.some((x) => x.status === "pending" || x.status === "approved");
   const r = Number(amount);
   const err = amount === "" ? "" : r < WALLET.withdrawMin ? `Minimum ₹${WALLET.withdrawMin}.` : r * 100 > w.balance ? `You can withdraw up to ${inr(w.balance)}.` : "";
-
-  useEffect(() => {
-    if (open) setMethod(w.kyc?.bankAccount ? "bank" : "upi");
-  }, [open, w.kyc?.bankAccount]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -404,11 +408,12 @@ const Pill = ({ m }: { m: { l: string; cls: string } }) => (
 );
 
 function DepositList({ list, onOpen }: { list: Deposit[]; onOpen: (d: Deposit) => void }) {
+  const now = useNow(30_000);
   if (!list.length) return <Empty title="No cash added yet" body="Tap Add cash to top up your wallet with UPI." />;
   return (
     <ul className="card divide-y divide-line">
       {list.map((d) => {
-        const open = d.status === "pending" && (d.closeBy ?? 0) > Date.now();
+        const open = d.status === "pending" && (d.closeBy ?? 0) > now;
         return (
           <li key={d.id} className="flex items-center gap-3 px-4 py-3">
             <span className="w-9 h-9 rounded-full bg-green-soft text-green grid place-items-center shrink-0"><ArrowDownLeft size={18} /></span>

@@ -1,10 +1,10 @@
+// BEFORE LAUNCH: replace the three support contacts with your real ones (shown on the Help page).
 export const APP = {
   name: "Goti Rooms",
   tagline: "Ludo with your friends, one room code at a time.",
-  supportWhatsApp: "910000000000",
+  supportWhatsApp: "910000000000", // country code + number, no "+"
   supportEmail: "help@example.com",
   supportTelegram: "https://t.me/example",
-  demoOtp: "123456",
 };
 
 export type GameSlug = "ludo-classic" | "snakes" | "ludo-popular";
