@@ -38,6 +38,8 @@ backup*.sql
 .DS_Store
 Thumbs.db
 *.pem
+# ...except Amazon's public RDS certificate authorities (not a secret; needed by the Docker build)
+!certs/rds-global-bundle.pem
 *.log
 
 # debug

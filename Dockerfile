@@ -21,6 +21,12 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# The AWS RDS certificate bundle is in the repo; fetch it if this checkout doesn't have it.
+RUN if [ ! -s certs/rds-global-bundle.pem ]; then \
+      mkdir -p certs && \
+      wget -q -O certs/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem && \
+      grep -q "BEGIN CERTIFICATE" certs/rds-global-bundle.pem; \
+    fi
 RUN npm run build
 
 # ---------- 3. runtime ----------
